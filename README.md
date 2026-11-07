@@ -1,6 +1,6 @@
 # travel-time
 
-Servicio serverless (desplegado en Vercel) para notificar por Telegram el tiempo estimado y estado del viaje al trabajo en transporte público (colectivo 105), disparado por webhook desde Android (MacroDroid / Tasker).
+Servicio serverless (desplegado en Vercel) para notificar por Telegram el tiempo estimado y estado del viaje al trabajo y el regreso a casa en transporte público, disparado por webhook desde Android (MacroDroid / Tasker).
 
 ## Requisitos
 
@@ -34,4 +34,9 @@ npx vercel --prod
 
 ## API
 
-- `GET /api/travel-time` (o `POST`): Procesa el cálculo de ruta y envía el reporte a Telegram.
+- `GET /api/travel-time` (o `POST`): Procesa el viaje de ida al trabajo (origen en casa, destino en Edificio Libertador, priorizando colectivo 105).
+- `GET /api/travel-home` (o `GET /api/travel-time?direction=home`): Procesa la vuelta a casa en dos tramos (Virtualisa $\rightarrow$ Transbordo 71-110 en colectivo 71, y Transbordo 71-110 $\rightarrow$ Casa en colectivo 110).
+
+## Tests
+
+Tests unitarios automatizados con el test runner nativo de Node (`node:test`) y `tsx`. Todas las llamadas HTTP a Google Maps y Telegram se simulan mediante mocks de `fetch`, sin consumir cuotas de APIs externas ni requerir credenciales activas.

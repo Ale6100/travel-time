@@ -4,6 +4,10 @@
     {
       "source": "/travel-time",
       "destination": "/api/travel-time"
+    },
+    {
+      "source": "/travel-home",
+      "destination": "/api/travel-home"
     }
   ]
 }

@@ -119,3 +119,86 @@ test('computeTransitRoute prioriza ruta con línea 105 si hay alternativas', asy
   assert.strictEqual(result.hasLine105, true);
   assert.deepStrictEqual(result.warnings, []);
 });
+
+test('computeTwoLegTransitRoute calcula tramos encadenados para la vuelta a casa', async () => {
+  const calls: { url: string; body: any }[] = [];
+
+  const mockFetch: typeof fetch = async (input, init) => {
+    const body = JSON.parse(init?.body as string);
+    calls.push({ url: String(input), body });
+
+    if (calls.length === 1) {
+      return new Response(
+        JSON.stringify({
+          routes: [
+            {
+              duration: '1500s',
+              distanceMeters: 6000,
+              warnings: ['Alerta tramo 1'],
+              legs: [
+                {
+                  steps: [
+                    {
+                      travelMode: 'TRANSIT',
+                      staticDuration: '1500s',
+                      transitDetails: { transitLine: { nameShort: '71' } },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        routes: [
+          {
+            duration: '1800s',
+            distanceMeters: 7000,
+            warnings: ['Alerta tramo 2'],
+            legs: [
+              {
+                steps: [
+                  {
+                    travelMode: 'TRANSIT',
+                    staticDuration: '1800s',
+                    transitDetails: { transitLine: { nameShort: '110' } },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
+  };
+
+  const fixedNow = new Date('2026-11-09T21:00:00Z');
+  const { computeTwoLegTransitRoute } = await import('./routes.js');
+  const twoLegResult = await computeTwoLegTransitRoute({
+    origin: { lat: -34.5194, lng: -58.5164 },
+    transfer: { lat: -34.5511, lng: -58.4914 },
+    destination: { lat: -34.6070, lng: -58.4548 },
+    apiKey: 'test-key',
+    now: fixedNow,
+    fetchFn: mockFetch,
+  });
+
+  assert.strictEqual(calls.length, 2);
+  assert.strictEqual(twoLegResult.totalDurationMinutes, 55);
+  assert.strictEqual(twoLegResult.totalDistanceKm, 13.0);
+  assert.strictEqual(twoLegResult.etaString, '18:55');
+  assert.strictEqual(twoLegResult.leg1.steps[0].line, '71');
+  assert.strictEqual(twoLegResult.leg2.steps[0].line, '110');
+  assert.deepStrictEqual(twoLegResult.warnings, ['Alerta tramo 1', 'Alerta tramo 2']);
+
+  const leg2Departure = calls[1].body.departureTime;
+  assert.ok(leg2Departure);
+  const diffMinutes = (new Date(leg2Departure).getTime() - fixedNow.getTime()) / (60 * 1000);
+  assert.strictEqual(diffMinutes, 25);
+});

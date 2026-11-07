@@ -16,12 +16,33 @@ export const DEFAULT_DESTINATION: LocationPoint = {
   name: 'Edificio Libertador',
 };
 
+export const DEFAULT_RETURN_ORIGIN: LocationPoint = {
+  lat: -34.51943191089161,
+  lng: -58.516495000181486,
+  name: 'Virtualisa',
+};
+
+export const DEFAULT_RETURN_TRANSFER: LocationPoint = {
+  lat: -34.55113654261747,
+  lng: -58.49148488919312,
+  name: 'Transbordo 71-110',
+};
+
+export const DEFAULT_RETURN_DESTINATION: LocationPoint = {
+  lat: -34.60707974848437,
+  lng: -58.45489400891625,
+  name: 'Casa',
+};
+
 export interface Config {
   googleMapsApiKey: string;
   telegramBotToken: string;
   telegramChatId: string;
   origin: LocationPoint;
   destination: LocationPoint;
+  returnOrigin: LocationPoint;
+  returnTransfer: LocationPoint;
+  returnDestination: LocationPoint;
 }
 
 export function getConfig(): Config {
@@ -41,5 +62,8 @@ export function getConfig(): Config {
     telegramChatId,
     origin: DEFAULT_ORIGIN,
     destination: DEFAULT_DESTINATION,
+    returnOrigin: DEFAULT_RETURN_ORIGIN,
+    returnTransfer: DEFAULT_RETURN_TRANSFER,
+    returnDestination: DEFAULT_RETURN_DESTINATION,
   };
 }

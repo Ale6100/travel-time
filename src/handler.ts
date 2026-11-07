@@ -1,6 +1,14 @@
 import { Config, getConfig } from './config.js';
-import { computeTransitRoute, RouteComputationResult } from './services/routes.js';
-import { sendTelegramNotification } from './services/telegram.js';
+import {
+  computeTransitRoute,
+  computeTwoLegTransitRoute,
+  RouteComputationResult,
+  TwoLegRouteResult,
+} from './services/routes.js';
+import {
+  sendReturnTelegramNotification,
+  sendTelegramNotification,
+} from './services/telegram.js';
 
 export interface HandlerRequest {
   method?: string;
@@ -26,15 +34,6 @@ export async function processTravelTime(
   const now = options.now || new Date();
   const fetchFn = options.fetchFn || fetch;
 
-  // 1. Ubicación de origen (del GPS opcional si se envía, o fijo en casa)
-  const reqLat = parseFloat(req.body?.lat || (req.query?.lat as string));
-  const reqLng = parseFloat(req.body?.lng || (req.query?.lng as string));
-
-  const hasReqCoords = !isNaN(reqLat) && !isNaN(reqLng);
-  const originLat = hasReqCoords ? reqLat : config.origin.lat;
-  const originLng = hasReqCoords ? reqLng : config.origin.lng;
-  const originName = hasReqCoords ? 'Ubicación actual (GPS)' : config.origin.name;
-
   if (!config.googleMapsApiKey) {
     return {
       statusCode: 500,
@@ -42,7 +41,94 @@ export async function processTravelTime(
     };
   }
 
-  // 2. Cálculo con Google Maps Routes API
+  const directionParam = (
+    req.query?.direction ||
+    req.body?.direction ||
+    req.query?.trip ||
+    req.body?.trip ||
+    ''
+  )
+    .toString()
+    .toLowerCase();
+
+  const isReturnToHome =
+    directionParam === 'home' || directionParam === 'return' || directionParam === 'vuelta';
+
+  const reqLat = parseFloat(req.body?.lat || (req.query?.lat as string));
+  const reqLng = parseFloat(req.body?.lng || (req.query?.lng as string));
+  const hasReqCoords = !isNaN(reqLat) && !isNaN(reqLng);
+
+  if (isReturnToHome) {
+    const originLat = hasReqCoords ? reqLat : config.returnOrigin.lat;
+    const originLng = hasReqCoords ? reqLng : config.returnOrigin.lng;
+    const originName = hasReqCoords ? 'Ubicación actual (GPS)' : config.returnOrigin.name;
+
+    let twoLegResult: TwoLegRouteResult;
+    try {
+      twoLegResult = await computeTwoLegTransitRoute({
+        origin: { lat: originLat, lng: originLng },
+        transfer: { lat: config.returnTransfer.lat, lng: config.returnTransfer.lng },
+        destination: { lat: config.returnDestination.lat, lng: config.returnDestination.lng },
+        apiKey: config.googleMapsApiKey,
+        now,
+        leg1PreferredLines: ['71'],
+        leg2PreferredLines: ['110'],
+        fetchFn,
+      });
+    } catch (err: any) {
+      return {
+        statusCode: 502,
+        body: { error: 'Error calculando ruta con Google Maps', details: err?.message },
+      };
+    }
+
+    try {
+      await sendReturnTelegramNotification({
+        token: config.telegramBotToken,
+        chatId: config.telegramChatId,
+        twoLegRoute: twoLegResult,
+        originName,
+        transferName: config.returnTransfer.name,
+        destinationName: config.returnDestination.name,
+        fetchFn,
+      });
+    } catch (err: any) {
+      return {
+        statusCode: 500,
+        body: {
+          error: 'Ruta calculada pero falló el envío a Telegram',
+          details: err?.message,
+          twoLegRoute: twoLegResult,
+        },
+      };
+    }
+
+    return {
+      statusCode: 200,
+      body: {
+        success: true,
+        sent: true,
+        direction: 'home',
+        durationMinutes: twoLegResult.totalDurationMinutes,
+        eta: twoLegResult.etaString,
+        distanceKm: twoLegResult.totalDistanceKm,
+        leg1: {
+          durationMinutes: twoLegResult.leg1.durationMinutes,
+          distanceKm: twoLegResult.leg1.distanceKm,
+        },
+        leg2: {
+          durationMinutes: twoLegResult.leg2.durationMinutes,
+          distanceKm: twoLegResult.leg2.distanceKm,
+        },
+        mapsUrl: twoLegResult.mapsUrl,
+      },
+    };
+  }
+
+  const originLat = hasReqCoords ? reqLat : config.origin.lat;
+  const originLng = hasReqCoords ? reqLng : config.origin.lng;
+  const originName = hasReqCoords ? 'Ubicación actual (GPS)' : config.origin.name;
+
   let routeResult: RouteComputationResult;
   try {
     routeResult = await computeTransitRoute({
@@ -50,6 +136,7 @@ export async function processTravelTime(
       destination: { lat: config.destination.lat, lng: config.destination.lng },
       apiKey: config.googleMapsApiKey,
       now,
+      preferredLines: ['105'],
       fetchFn,
     });
   } catch (err: any) {
@@ -59,7 +146,6 @@ export async function processTravelTime(
     };
   }
 
-  // 3. Notificación por Telegram
   try {
     await sendTelegramNotification({
       token: config.telegramBotToken,
@@ -85,6 +171,7 @@ export async function processTravelTime(
     body: {
       success: true,
       sent: true,
+      direction: 'work',
       durationMinutes: routeResult.durationMinutes,
       eta: routeResult.etaString,
       distanceKm: routeResult.distanceKm,

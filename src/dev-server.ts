@@ -8,9 +8,14 @@ const server = http.createServer(async (req, res) => {
   const parsedUrl = parseUrl(req.url || '', true);
   const pathname = parsedUrl.pathname;
 
-  if (pathname !== '/api/travel-time') {
+  if (
+    pathname !== '/api/travel-time' &&
+    pathname !== '/api/travel-home' &&
+    pathname !== '/travel-time' &&
+    pathname !== '/travel-home'
+  ) {
     res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Ruta no encontrada. Usar /api/travel-time' }));
+    res.end(JSON.stringify({ error: 'Ruta no encontrada. Usar /api/travel-time o /api/travel-home' }));
     return;
   }
 
@@ -30,10 +35,15 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  const query = { ...parsedUrl.query };
+  if (pathname === '/api/travel-home' || pathname === '/travel-home') {
+    query.direction = 'home';
+  }
+
   const result = await processTravelTime({
     method: req.method,
     headers: req.headers,
-    query: parsedUrl.query,
+    query,
     body,
   });
 
